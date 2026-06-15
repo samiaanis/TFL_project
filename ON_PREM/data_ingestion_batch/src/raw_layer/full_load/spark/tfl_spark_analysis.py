@@ -86,30 +86,30 @@ print("Source tables created successfully")
 print("\nLoading tables from HDFS...")
 
 dim_date = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_date") \
+    .csv(f"{HDFS_BASE}/dim_date_full_load") \
     .toDF("date_id","year","quarter","month","is_annual","period_label","period_start","period_end","created_at")
 
 dim_lines = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_lines") \
+    .csv(f"{HDFS_BASE}/dim_lines_full_load") \
     .toDF("line_id","line_name","line_color","is_night_service","created_at","updated_at")
 
 dim_networks = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_networks") \
+    .csv(f"{HDFS_BASE}/dim_networks_full_load") \
     .toDF("network_id","network_name","network_type","created_at","updated_at")
 
 dim_stations = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_stations") \
+    .csv(f"{HDFS_BASE}/dim_stations_full_load") \
     .toDF("station_id","nlc_code","station_name","network_id",
           "has_london_underground","has_elizabeth_line","has_overground",
           "has_dlr","has_night_tube","is_active","created_at","updated_at")
 
 fact_pax = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/fact_passenger_entry_exit") \
+    .csv(f"{HDFS_BASE}/fact_passenger_entry_exit_full_load") \
     .toDF("entry_exit_id","station_id","date_id","total_entry_exit",
           "estimated_entries","estimated_exits","record_type","data_source","created_at")
 
 fact_lines = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/fact_station_lines") \
+    .csv(f"{HDFS_BASE}/fact_station_lines_full_load") \
     .toDF("station_line_id","station_id","line_id","is_interchange",
           "effective_from","effective_to","created_at")
 
@@ -215,18 +215,39 @@ save_gold_table(interchange_stations, "gold_interchange_stations")
 # ANALYSIS 6: Quarterly Trend
 # ============================================================
 
-print("\n" + "=" * 60)
+print("=" * 60)
 print("ANALYSIS 6: Passengers by Year and Quarter")
 print("=" * 60)
 
-quarterly_trend = fact_pax \
-    .join(dim_date, "date_id") \
-    .groupBy(col("year").cast(IntegerType()), col("quarter").cast(IntegerType())) \
-    .agg(_sum("total_entry_exit").alias("total_passengers")) \
-    .orderBy("year", "quarter")
+passengers_by_year_quarter = fact_pax.join(
+    dim_date,
+    fact_pax.date_id == dim_date.date_id,
+    "inner"
+).select(
+    fact_pax.total_entry_exit,
+    dim_date.year,
+    dim_date.quarter
+).withColumn(
+    "year", col("year").cast("int")
+).withColumn(
+    "quarter", col("quarter").cast("int")
+).withColumn(
+    "total_entry_exit", col("total_entry_exit").cast("long")
+).groupBy(
+    "year",
+    "quarter"
+).agg(
+    _sum("total_entry_exit").alias("total_passengers")
+).orderBy(
+    "year",
+    "quarter"
+)
 
-quarterly_trend.show(truncate=False)
-save_gold_table(quarterly_trend, "gold_quarterly_trend")
+passengers_by_year_quarter.show()
+
+passengers_by_year_quarter.write.mode("overwrite").parquet(
+    f"{OUTPUT_BASE}/gold_passengers_by_year_quarter"
+)
 
 # ============================================================
 # ANALYSIS 7: Night Tube Analysis

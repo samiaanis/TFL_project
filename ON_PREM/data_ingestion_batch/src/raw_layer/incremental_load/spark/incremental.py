@@ -15,7 +15,7 @@ spark.sparkContext.setLogLevel("WARN")
 
 
 HDFS_BASE = "/tmp/tfl_project_hadoop"
-OUTPUT_BASE = "/tmp/tfl_project_hadoop_jen/gold"
+OUTPUT_BASE = "/tmp/tfl_project_hadoop/gold"
 HIVE_DB = "tfl_db"
 
 CHECK_COLUMN = "entry_exit_id"
@@ -93,7 +93,7 @@ def read_last_value():
     try:
         return int(value.strip())
     except ValueError:
-        raise ValueError(f"Invalid watermark value found: {value}")
+        raise ValueError(f"Invalid watermark value found: {value}") 
 
 
 def write_last_value(value):
@@ -175,7 +175,7 @@ def merge_sum_gold(delta_df, table_name, group_cols, sum_cols):
 print("\nLoading tables from HDFS...")
 
 dim_date = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_date") \
+    .csv(f"{HDFS_BASE}/dim_date_full_load") \
     .toDF(
         "date_id",
         "year",
@@ -189,7 +189,7 @@ dim_date = spark.read.option("header", "false").option("inferSchema", "true") \
     )
 
 dim_lines = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_lines") \
+    .csv(f"{HDFS_BASE}/dim_lines_full_load") \
     .toDF(
         "line_id",
         "line_name",
@@ -200,7 +200,7 @@ dim_lines = spark.read.option("header", "false").option("inferSchema", "true") \
     )
 
 dim_networks = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_networks") \
+    .csv(f"{HDFS_BASE}/dim_networks_full_load") \
     .toDF(
         "network_id",
         "network_name",
@@ -210,7 +210,7 @@ dim_networks = spark.read.option("header", "false").option("inferSchema", "true"
     )
 
 dim_stations = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_stations") \
+    .csv(f"{HDFS_BASE}/dim_stations_full_load") \
     .toDF(
         "station_id",
         "nlc_code",
@@ -227,7 +227,7 @@ dim_stations = spark.read.option("header", "false").option("inferSchema", "true"
     )
 
 fact_pax = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/fact_passenger_entry_exit") \
+    .csv(f"{HDFS_BASE}/fact_passenger_entry_exit_full_load") \
     .toDF(
         "entry_exit_id",
         "station_id",
@@ -241,7 +241,7 @@ fact_pax = spark.read.option("header", "false").option("inferSchema", "true") \
     )
 
 fact_lines = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/fact_station_lines") \
+    .csv(f"{HDFS_BASE}/fact_station_lines_full_load") \
     .toDF(
         "station_line_id",
         "station_id",
