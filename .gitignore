@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Presentation / generated output files
+*.pptx
+*.pdf
+generate_slides.py
+generate_script_pdf.py
+merge_presentations.py
