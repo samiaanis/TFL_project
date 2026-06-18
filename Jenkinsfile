@@ -5,7 +5,7 @@ pipeline {
         choice(
             name: 'LOAD_TOOL',
             choices: ['SQOOP', 'SPARK'],
-            description: 'Choose Sqoop or Spark'
+            description: 'SQOOP = full end-to-end pipeline (ingest + transform). SPARK = re-run transforms only (skips Sqoop, assumes HDFS data already exists).'
         )
 
         choice(
@@ -41,16 +41,15 @@ pipeline {
     SQOOP_FULL_SCRIPT        = 'ON_PREM/data_ingestion_batch/src/raw_layer/full_load/raw_sqoop_full_load.sh'
     SQOOP_INCREMENTAL_SCRIPT = 'ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load/raw_incremental_load.sh'
 
-    RAW_HIVE_SCRIPT          = 'ON_PREM/data_ingestion_batch/src/raw_layer/create_raw_hive_table.hql'
     RAW_HIVE_PY_SCRIPT       = 'ON_PREM/data_ingestion_batch/src/raw_layer/create_raw_hive_table.py'
     IMPALA_RAW_SCRIPT        = 'ON_PREM/data_ingestion_batch/src/raw_layer/invalidate_impala_raw.sql'
-    CURATED_SPARK_SCRIPT     = 'ON_PREM/data_ingestion_batch/src/curated_layer/spark/tfl_curated_layer.py'
-    CURATED_HIVE_SCRIPT      = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/curated_full_load.hql'
-    CURATED_HIVE_PY_SCRIPT   = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/create_curated_hive_table.py'
-    IMPALA_CURATED_SCRIPT    = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/invalidate_impala_curated.sql'
 
     SPARK_FULL_SCRIPT        = 'ON_PREM/data_ingestion_batch/src/raw_layer/full_load/spark/tfl_spark_analysis.py'
     SPARK_INCREMENTAL_SCRIPT = 'ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load/spark/incremental.py'
+
+    CURATED_SPARK_SCRIPT     = 'ON_PREM/data_ingestion_batch/src/curated_layer/spark/tfl_curated_layer.py'
+    CURATED_HIVE_PY_SCRIPT   = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/create_curated_hive_table.py'
+    IMPALA_CURATED_SCRIPT    = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/invalidate_impala_curated.sql'
 }
 
     stages {
@@ -73,8 +72,9 @@ pipeline {
                 }
             }
         }
+
         stage('Test SSH Login') {
-                    steps {
+            steps {
                 echo '========================================='
                 echo 'Testing SSH Login to Cloudera'
                 echo '========================================='
@@ -94,56 +94,57 @@ pipeline {
                 '''
             }
         }
+
         stage('Prepare Remote Directory') {
             steps {
-        echo '========================================='
-        echo 'Stage 2: Create Directories on Cloudera'
-        echo '========================================='
+                echo '========================================='
+                echo 'Stage 2: Create Directories on Cloudera'
+                echo '========================================='
 
-        sh '''
-            set +x
+                sh '''
+                    set +x
 
-            sshpass -p "${REMOTE_PASSWORD}" ssh \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                ${REMOTE_USER}@${REMOTE_HOST} \
-                "mkdir -p ${PROJECT_DIR}/ON_PREM/data_ingestion_batch/src/raw_layer/full_load \
-                          ${PROJECT_DIR}/ON_PREM/data_ingestion_batch/src/raw_layer/full_load/spark \
-                          ${PROJECT_DIR}/ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load \
-                          ${PROJECT_DIR}/ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load/spark \
-                 && echo REMOTE_DIR_READY"
-        '''
+                    sshpass -p "${REMOTE_PASSWORD}" ssh \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "mkdir -p ${PROJECT_DIR}/ON_PREM/data_ingestion_batch/src/raw_layer/full_load \
+                                  ${PROJECT_DIR}/ON_PREM/data_ingestion_batch/src/raw_layer/full_load/spark \
+                                  ${PROJECT_DIR}/ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load \
+                                  ${PROJECT_DIR}/ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load/spark \
+                         && echo REMOTE_DIR_READY"
+                '''
+            }
         }
-}
 
         stage('Copy Scripts to Remote') {
             steps {
-                    echo '========================================='
-                    echo 'Stage 3: Copy Scripts to Cloudera'
-                    echo '========================================='
+                echo '========================================='
+                echo 'Stage 3: Copy Scripts to Cloudera'
+                echo '========================================='
 
-                    sh '''
-                        set +x
+                sh '''
+                    set +x
 
-                        echo "Copying ON_PREM folder to remote host..."
+                    echo "Copying ON_PREM folder to remote host..."
 
-                        sshpass -p "${REMOTE_PASSWORD}" scp \
-                            -o StrictHostKeyChecking=no \
-                            -o UserKnownHostsFile=/dev/null \
-                            -r ON_PREM \
-                            ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/
+                    sshpass -p "${REMOTE_PASSWORD}" scp \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        -r ON_PREM \
+                        ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/
 
-                        echo "Copying Jenkinsfile to remote host..."
+                    echo "Copying Jenkinsfile to remote host..."
 
-                        sshpass -p "${REMOTE_PASSWORD}" scp \
-                            -o StrictHostKeyChecking=no \
-                            -o UserKnownHostsFile=/dev/null \
-                            Jenkinsfile \
-                            ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/ || true
+                    sshpass -p "${REMOTE_PASSWORD}" scp \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        Jenkinsfile \
+                        ${REMOTE_USER}@${REMOTE_HOST}:${PROJECT_DIR}/ || true
 
-                        echo "Scripts copied to remote host"
-                    '''
-        }
+                    echo "Scripts copied to remote host"
+                '''
+            }
         }
 
         stage('Check Remote Tools') {
@@ -178,27 +179,18 @@ pipeline {
                         "
                 '''
             }
-}
+        }
+
+        // ── SQOOP STAGES (ingestion) ─────────────────────────────────────────
+
         stage('Select Sqoop Tables') {
             when {
-                expression {
-                    return params.LOAD_TOOL == 'SQOOP'
-                }
+                expression { return params.LOAD_TOOL == 'SQOOP' }
             }
-
             steps {
                 script {
-                    def dimensions = [
-                        'dim_date',
-                        'dim_lines',
-                        'dim_networks',
-                        'dim_stations'
-                    ]
-
-                    def factTables = [
-                        'fact_passenger_entry_exit',
-                        'fact_station_lines'
-                    ]
+                    def dimensions = ['dim_date', 'dim_lines', 'dim_networks', 'dim_stations']
+                    def factTables = ['fact_passenger_entry_exit', 'fact_station_lines']
 
                     if (params.LOAD_SCOPE == 'ALL') {
                         env.TABLE_LIST = (dimensions + factTables).join(',')
@@ -215,275 +207,229 @@ pipeline {
             }
         }
 
-stage('Run Sqoop Load on Remote') {
-    when {
-        expression {
-            return params.LOAD_TOOL == 'SQOOP'
-        }
-    }
+        stage('Run Sqoop Load on Remote') {
+            when {
+                expression { return params.LOAD_TOOL == 'SQOOP' }
+            }
+            steps {
+                script {
+                    def tables = env.TABLE_LIST.split(',')
 
-    steps {
-        script {
-            def tables = env.TABLE_LIST.split(',')
+                    for (table in tables) {
+                        table = table.trim()
 
-            for (table in tables) {
-                table = table.trim()
+                        def targetSuffix = (params.LOAD_TYPE == 'FULL') ? '_full_load' : '_inc_load'
+                        def hdfsTargetPath = "${env.HDFS_RAW_BASE}/${table}${targetSuffix}"
 
-                def targetSuffix = ''
-                if (params.LOAD_TYPE == 'FULL') {
-                    targetSuffix = '_full_load'
-                } else {
-                    targetSuffix = '_inc_load'
-                }
+                        echo "=================================================="
+                        echo "Running Sqoop ${params.LOAD_TYPE} load on remote"
+                        echo "Table           : ${table}"
+                        echo "HDFS target path: ${hdfsTargetPath}"
+                        echo "=================================================="
 
-                def hdfsTargetPath = "${env.HDFS_RAW_BASE}/${table}${targetSuffix}"
+                        def script = (params.LOAD_TYPE == 'FULL') ? env.SQOOP_FULL_SCRIPT : env.SQOOP_INCREMENTAL_SCRIPT
 
-                echo "=================================================="
-                echo "Running Sqoop ${params.LOAD_TYPE} load on remote"
-                echo "Table           : ${table}"
-                echo "HDFS target path: ${hdfsTargetPath}"
-                echo "=================================================="
-
-                if (params.LOAD_TYPE == 'FULL') {
-                    sh """
-                        set +x
-
-                        sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
-                            cd \${PROJECT_DIR}
-                            chmod +x \${SQOOP_FULL_SCRIPT}
-                            \${SQOOP_FULL_SCRIPT} ${table} ${hdfsTargetPath}
-                        "
-                    """
-                }
-
-                if (params.LOAD_TYPE == 'INCREMENTAL') {
-                    sh """
-                        set +x
-
-                        sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
-                            cd \${PROJECT_DIR}
-                            chmod +x \${SQOOP_INCREMENTAL_SCRIPT}
-                            \${SQOOP_INCREMENTAL_SCRIPT} ${table} ${hdfsTargetPath}
-                        "
-                    """
+                        sh """
+                            set +x
+                            sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
+                                cd \${PROJECT_DIR}
+                                chmod +x ${script}
+                                ${script} ${table} ${hdfsTargetPath}
+                            "
+                        """
+                    }
                 }
             }
         }
-    }
-}
+
         stage('Create Raw Hive Tables') {
-    when {
-        expression {
-            return params.LOAD_TOOL == 'SQOOP' && params.LOAD_TYPE == 'FULL'
+            when {
+                expression { return params.LOAD_TOOL == 'SQOOP' && params.LOAD_TYPE == 'FULL' }
+            }
+            steps {
+                echo '========================================='
+                echo 'Stage: Create Raw Hive External Tables'
+                echo '========================================='
+
+                sh """
+                    set +x
+                    sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
+                        cd \${PROJECT_DIR}
+                        echo 'Creating raw Hive external tables in tfl_db...'
+                        spark-submit --master local[*] \${RAW_HIVE_PY_SCRIPT}
+                        echo 'Raw Hive tables ready'
+                    "
+                """
+            }
         }
-    }
-
-    steps {
-        echo '========================================='
-        echo 'Stage: Create Raw Hive External Tables'
-        echo '========================================='
-
-        sh """
-            set +x
-
-            sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
-                cd \${PROJECT_DIR}
-                echo 'Creating raw Hive external tables in tfl_db via Spark...'
-                spark-submit --master local[*] \${RAW_HIVE_PY_SCRIPT}
-                echo 'Raw Hive tables created successfully'
-            "
-        """
-    }
-}
 
         stage('Register Raw Tables in Impala') {
-    when {
-        expression {
-            return params.LOAD_TOOL == 'SQOOP' && params.LOAD_TYPE == 'FULL'
+            when {
+                expression { return params.LOAD_TOOL == 'SQOOP' && params.LOAD_TYPE == 'FULL' }
+            }
+            steps {
+                echo '========================================='
+                echo 'Stage: Invalidate Impala Metadata (Raw)'
+                echo '========================================='
+
+                sh """
+                    set +x
+                    sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
+                        cd \${PROJECT_DIR}
+                        impala-shell -i localhost -f \${IMPALA_RAW_SCRIPT} || echo 'WARNING: impala-shell unavailable - invalidate manually in Hue'
+                        echo 'Impala raw stage complete'
+                    "
+                """
+            }
         }
-    }
 
-    steps {
-        echo '========================================='
-        echo 'Stage: Invalidate Impala Metadata (Raw)'
-        echo '========================================='
+        // ── SPARK STAGES (transformation) — run for FULL load regardless of LOAD_TOOL ──
 
-        sh """
-            set +x
+        stage('Run Spark Analysis') {
+            when {
+                expression { return params.LOAD_TYPE == 'FULL' }
+            }
+            steps {
+                echo '========================================='
+                echo 'Stage: Spark Analysis (Gold Layer)'
+                echo '========================================='
 
-            sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
-                cd \${PROJECT_DIR}
-                echo 'Registering raw Hive tables in Impala...'
-                impala-shell -i localhost -f \${IMPALA_RAW_SCRIPT} || echo 'WARNING: impala-shell failed (Python version issue) - run INVALIDATE METADATA manually in Hue if needed'
-                echo 'Impala stage complete'
-            "
-        """
-    }
-}
-
-        stage('Run Spark Full Flow on Remote') {
-    when {
-        expression {
-            return params.LOAD_TOOL == 'SPARK' && params.LOAD_TYPE == 'FULL'
+                sh '''
+                    set +x
+                    sshpass -p "${REMOTE_PASSWORD}" ssh \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "
+                            cd ${PROJECT_DIR}
+                            echo 'Running Spark analysis...'
+                            spark-submit --master local[*] ${SPARK_FULL_SCRIPT}
+                            echo 'Spark analysis complete'
+                        "
+                '''
+            }
         }
-    }
 
-    steps {
-        sh '''
-            set +x
+        stage('Run Curated Layer') {
+            when {
+                expression { return params.LOAD_TYPE == 'FULL' }
+            }
+            steps {
+                echo '========================================='
+                echo 'Stage: Spark Curated Layer Transformation'
+                echo '========================================='
 
-            sshpass -p "${REMOTE_PASSWORD}" ssh \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                ${REMOTE_USER}@${REMOTE_HOST} \
-                "
-                    cd ${PROJECT_DIR}
-                    spark-submit --master local[*] ${SPARK_FULL_SCRIPT}
-                "
-        '''
-    }
-}
-
-        stage('Run Curated Layer on Remote') {
-    when {
-        expression {
-            return params.LOAD_TOOL == 'SPARK' && params.LOAD_TYPE == 'FULL'
+                sh '''
+                    set +x
+                    sshpass -p "${REMOTE_PASSWORD}" ssh \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "
+                            cd ${PROJECT_DIR}
+                            echo 'Running curated layer transformation...'
+                            spark-submit --master local[*] ${CURATED_SPARK_SCRIPT}
+                            echo 'Curated layer complete'
+                        "
+                '''
+            }
         }
-    }
-
-    steps {
-        echo '========================================='
-        echo 'Stage: Run Curated Layer (Spark)'
-        echo '========================================='
-
-        sh '''
-            set +x
-
-            sshpass -p "${REMOTE_PASSWORD}" ssh \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                ${REMOTE_USER}@${REMOTE_HOST} \
-                "
-                    cd ${PROJECT_DIR}
-                    echo 'Running curated layer transformation...'
-                    spark-submit --master local[*] ${CURATED_SPARK_SCRIPT}
-                    echo 'Curated layer complete'
-                "
-        '''
-    }
-}
 
         stage('Create Curated Hive Tables') {
-    when {
-        expression {
-            return params.LOAD_TOOL == 'SPARK' && params.LOAD_TYPE == 'FULL'
+            when {
+                expression { return params.LOAD_TYPE == 'FULL' }
+            }
+            steps {
+                echo '========================================='
+                echo 'Stage: Create Curated Hive Tables'
+                echo '========================================='
+
+                sh '''
+                    set +x
+                    sshpass -p "${REMOTE_PASSWORD}" ssh \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "
+                            cd ${PROJECT_DIR}
+                            echo 'Creating curated Hive tables...'
+                            spark-submit --master local[*] ${CURATED_HIVE_PY_SCRIPT}
+                            echo 'Curated Hive tables ready'
+                        "
+                '''
+            }
         }
-    }
-
-    steps {
-        echo '========================================='
-        echo 'Stage: Create Curated Hive Tables'
-        echo '========================================='
-
-        sh '''
-            set +x
-
-            sshpass -p "${REMOTE_PASSWORD}" ssh \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                ${REMOTE_USER}@${REMOTE_HOST} \
-                "
-                    cd ${PROJECT_DIR}
-                    echo 'Creating curated Hive tables via Spark...'
-                    spark-submit --master local[*] ${CURATED_HIVE_PY_SCRIPT}
-                    echo 'Curated Hive tables created successfully'
-                "
-        '''
-    }
-}
 
         stage('Register Curated Tables in Impala') {
-    when {
-        expression {
-            return params.LOAD_TOOL == 'SPARK' && params.LOAD_TYPE == 'FULL'
+            when {
+                expression { return params.LOAD_TYPE == 'FULL' }
+            }
+            steps {
+                echo '========================================='
+                echo 'Stage: Invalidate Impala Metadata (Curated)'
+                echo '========================================='
+
+                sh '''
+                    set +x
+                    sshpass -p "${REMOTE_PASSWORD}" ssh \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "
+                            cd ${PROJECT_DIR}
+                            impala-shell -i localhost -f ${IMPALA_CURATED_SCRIPT} || echo 'WARNING: impala-shell unavailable - invalidate manually in Hue'
+                            echo 'Impala curated stage complete'
+                        "
+                '''
+            }
         }
-    }
 
-    steps {
-        echo '========================================='
-        echo 'Stage: Invalidate Impala Metadata (Curated)'
-        echo '========================================='
+        // ── INCREMENTAL SPARK ────────────────────────────────────────────────
 
-        sh '''
-            set +x
-
-            sshpass -p "${REMOTE_PASSWORD}" ssh \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                ${REMOTE_USER}@${REMOTE_HOST} \
-                "
-                    cd ${PROJECT_DIR}
-                    echo 'Registering curated Hive tables in Impala...'
-                    impala-shell -i localhost -f ${IMPALA_CURATED_SCRIPT} || echo 'WARNING: impala-shell failed (Python version issue) - run INVALIDATE METADATA manually in Hue if needed'
-                    echo 'Impala curated stage complete'
-                "
-        '''
-    }
-}
-
-        stage('Run Spark Incremental Flow on Remote') {
-    when {
-        expression {
-            return params.LOAD_TOOL == 'SPARK' && params.LOAD_TYPE == 'INCREMENTAL'
+        stage('Run Spark Incremental Flow') {
+            when {
+                expression { return params.LOAD_TYPE == 'INCREMENTAL' }
+            }
+            steps {
+                sh '''
+                    set +x
+                    sshpass -p "${REMOTE_PASSWORD}" ssh \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "
+                            cd ${PROJECT_DIR}
+                            spark-submit --master local[*] ${SPARK_INCREMENTAL_SCRIPT}
+                        "
+                '''
+            }
         }
-    }
 
-    steps {
-        sh '''
-            set +x
+        // ── VALIDATION ───────────────────────────────────────────────────────
 
-            sshpass -p "${REMOTE_PASSWORD}" ssh \
-                -o StrictHostKeyChecking=no \
-                -o UserKnownHostsFile=/dev/null \
-                ${REMOTE_USER}@${REMOTE_HOST} \
-                "
-                    cd ${PROJECT_DIR}
-                    spark-submit --master "local[*]" ${SPARK_INCREMENTAL_SCRIPT}
-                "
-        '''
-    }
-}
-
-        stage('Validate HDFS Output on Remote') {
-    steps {
-        sh '''
-            set +x
-
-            if [ "$LOAD_TOOL" = "SQOOP" ]; then
-                sshpass -p "${REMOTE_PASSWORD}" ssh \
-                    -o StrictHostKeyChecking=no \
-                    -o UserKnownHostsFile=/dev/null \
-                    ${REMOTE_USER}@${REMOTE_HOST} \
-                    "hdfs dfs -ls ${HDFS_RAW_BASE} || true"
-            fi
-
-            if [ "$LOAD_TOOL" = "SPARK" ]; then
-                sshpass -p "${REMOTE_PASSWORD}" ssh \
-                    -o StrictHostKeyChecking=no \
-                    -o UserKnownHostsFile=/dev/null \
-                    ${REMOTE_USER}@${REMOTE_HOST} \
-                    "hdfs dfs -ls ${HDFS_GOLD_BASE} || true"
-            fi
-        '''
-    }
-}
+        stage('Validate HDFS Output') {
+            steps {
+                sh '''
+                    set +x
+                    sshpass -p "${REMOTE_PASSWORD}" ssh \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        ${REMOTE_USER}@${REMOTE_HOST} \
+                        "
+                            echo '=== HDFS Raw ==='
+                            hdfs dfs -ls ${HDFS_RAW_BASE} || true
+                            echo '=== HDFS Gold ==='
+                            hdfs dfs -ls ${HDFS_GOLD_BASE} || true
+                        "
+                '''
+            }
+        }
     }
 
     post {
         success {
             echo "Pipeline completed successfully."
         }
-
         failure {
             echo "Pipeline failed. Check Jenkins console logs."
         }
