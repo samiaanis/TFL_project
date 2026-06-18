@@ -275,88 +275,185 @@ tb(sl, "Blue = Dimension table    Red = Fact table    "
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# SLIDE 4 — Star Schema Diagram
+# SLIDE 4 — Star Schema Diagram  (redesigned)
 # ════════════════════════════════════════════════════════════════════════════
 sl = prs.slides.add_slide(BLANK)
 slide_chrome(sl, "PostgreSQL — Star Schema We Are Moving",
-             "2 fact tables  |  4 dimension tables  |  FK-enforced  |  ready for Sqoop")
+             "2 fact tables  |  4 dimension tables  |  FK-enforced  |  5,812 records")
 
-def schema_box(slide, l, t, w, h, title, cols, hdr_color):
+# Extra color tokens for schema rows
+PK_BG  = RGBColor(0xD4, 0xED, 0xDA)   # mint green — primary key row
+FK_BG  = RGBColor(0xFF, 0xF0, 0xCC)   # amber      — foreign key row
+PK_TXT = RGBColor(0x00, 0x5C, 0x2C)
+FK_TXT = RGBColor(0x8A, 0x5B, 0x00)
+_RH    = Inches(0.265)                 # row height
+_HH    = Inches(0.37)                  # header height
+
+def star_box(slide, l, t, w, title, rows, hdr_color):
+    """
+    rows: list of (col_name, dtype, kind [, fk_ref])
+      kind  = 'pk' | 'fk' | 'col'
+      fk_ref = name of referenced table (optional, shown inline)
+    Returns (total_height, {col_name: row_centre_y})
+    """
+    h = _HH + len(rows) * _RH + Inches(0.04)
     rect(slide, l, t, w, h, fill=WHITE, line_color=hdr_color)
-    rect(slide, l, t, w, Inches(0.33), fill=hdr_color)
+    rect(slide, l, t, w, _HH, fill=hdr_color)
     tb(slide, title,
-       l + Inches(0.1), t + Inches(0.04), w - Inches(0.2), Inches(0.26),
-       size=11, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
-    tb_multi(slide, cols,
-             l + Inches(0.1), t + Inches(0.37), w - Inches(0.2),
-             h - Inches(0.42), size=9, color=BODY_TEXT)
+       l+Inches(0.08), t+Inches(0.06), w-Inches(0.16), _HH-Inches(0.08),
+       size=9.5, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
 
-# Centre: fact_passenger_entry_exit
-schema_box(sl, Inches(4.5), Inches(1.3), Inches(4.3), Inches(3.1),
-           "fact_passenger_entry_exit",
-           ["entry_exit_id  PK",
-            "station_id     FK",
-            "date_id        FK",
-            "total_entry_exit",
-            "estimated_entries",
-            "estimated_exits",
-            "record_type / data_source"], FACT_HDR)
+    y = t + _HH + Inches(0.02)
+    alt = False
+    mids = {}
+    for row in rows:
+        col, dtype, kind = row[0], row[1], row[2]
+        ref = row[3] if len(row) > 3 else None
 
-# Bottom centre: bridge
-schema_box(sl, Inches(4.5), Inches(4.7), Inches(4.3), Inches(1.55),
-           "fact_station_lines  (bridge)",
-           ["station_line_id  PK",
-            "station_id FK    line_id FK",
-            "is_interchange   effective_from"], FACT_HDR)
+        if kind == 'pk':
+            bg, tc = PK_BG, PK_TXT
+            badge_fill = RGBColor(0x00, 0x88, 0x44)
+            badge_lbl  = 'PK'
+        elif kind == 'fk':
+            bg, tc = FK_BG, FK_TXT
+            badge_fill = GOLD
+            badge_lbl  = 'FK'
+        else:
+            bg = RGBColor(0xF5, 0xF7, 0xFF) if alt else WHITE
+            tc = BODY_TEXT
+            badge_fill, badge_lbl = None, None
+            alt = not alt
 
-# Left: dim_stations
-schema_box(sl, Inches(0.3), Inches(1.3), Inches(3.8), Inches(3.0),
-           "dim_stations",
-           ["station_id  PK",
-            "station_name",
-            "network_id  FK",
-            "has_night_tube  BOOL",
-            "has_dlr / has_overground",
-            "is_active"], DIM_HDR)
+        rect(slide, l, y, w, _RH, fill=bg)
 
-# Right: dim_date
-schema_box(sl, Inches(9.1), Inches(1.3), Inches(3.8), Inches(2.3),
-           "dim_date",
-           ["date_id  PK",
-            "year   quarter   month",
-            "is_annual  BOOL",
-            "period_label",
-            "period_start / period_end"], DIM_HDR)
+        if badge_lbl:
+            # Coloured PK/FK badge pill
+            rect(slide, l+Inches(0.06), y+Inches(0.04),
+                 Inches(0.24), _RH-Inches(0.08), fill=badge_fill)
+            tb(slide, badge_lbl,
+               l+Inches(0.06), y+Inches(0.04), Inches(0.24), _RH-Inches(0.08),
+               size=6.5, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+            tb(slide, col,
+               l+Inches(0.34), y+Inches(0.04), w*0.48, _RH-Inches(0.06),
+               size=8.5, bold=True, color=tc)
+        else:
+            tb(slide, col,
+               l+Inches(0.10), y+Inches(0.04), w*0.60, _RH-Inches(0.06),
+               size=8.5, color=tc)
 
-# Bottom left: dim_networks
-schema_box(sl, Inches(0.3), Inches(4.55), Inches(2.2), Inches(1.7),
-           "dim_networks",
-           ["network_id  PK",
-            "network_name",
-            "network_type"], DIM_HDR)
+        # Right side: FK reference OR data type
+        right_txt = f'-> {ref}' if (kind == 'fk' and ref) else dtype
+        right_col = FK_TXT if (kind == 'fk' and ref) else RGBColor(0x88, 0x88, 0xAA)
+        tb(slide, right_txt,
+           l+w*0.63, y+Inches(0.05), w*0.34, _RH-Inches(0.08),
+           size=7.5, italic=bool(ref), color=right_col)
 
-# Bottom right: dim_lines
-schema_box(sl, Inches(9.1), Inches(3.9), Inches(3.8), Inches(2.0),
-           "dim_lines",
-           ["line_id  PK",
-            "line_name",
-            "line_colour  (hex)",
-            "is_night_service  BOOL"], DIM_HDR)
+        mids[col] = y + _RH // 2
+        y += _RH
 
-# FK arrows (text-based, matching team style)
-for txt, l, t in [
-    ("FK", Inches(4.15), Inches(2.3)),
-    ("FK", Inches(8.85), Inches(2.3)),
-    ("FK", Inches(4.15), Inches(5.3)),
-    ("FK", Inches(7.25), Inches(5.3)),
-]:
-    tb(sl, txt, l, t, Inches(0.3), Inches(0.25),
-       size=8, bold=True, color=GOLD, align=PP_ALIGN.CENTER)
+    return h, mids
 
-tb(sl, "Red = Fact    Blue = Dimension    "
-       "5,812 records  |  all FK relationships enforced at PostgreSQL level",
-   Inches(0.4), Inches(6.65), Inches(12.5), Inches(0.3),
-   size=10, color=RGBColor(0x55, 0x55, 0x88), italic=True)
+def conn_h(slide, x1, x2, y):
+    """Horizontal gold connector line between two tables."""
+    rect(slide, min(x1, x2), y - Inches(0.012),
+         abs(x2 - x1), Inches(0.024), fill=GOLD)
+
+def conn_v(slide, x, y1, y2):
+    """Vertical gold connector line between two tables."""
+    rect(slide, x - Inches(0.012), min(y1, y2),
+         Inches(0.024), abs(y2 - y1), fill=GOLD)
+
+# ── Table positions ───────────────────────────────────────────────────────
+WD  = Inches(3.85)    # dimension width
+WF  = Inches(3.75)    # fact width
+LL  = Inches(0.25)    # left col
+LC  = Inches(4.72)    # centre col
+LR  = Inches(9.10)    # right col
+TT  = Inches(1.18)    # top row
+
+# ── Top row ───────────────────────────────────────────────────────────────
+h_dstat, mp_dstat = star_box(sl, LL, TT, WD, "dim_stations",
+    [('station_id',    'INT',     'pk'),
+     ('nlc_code',      'VARCHAR', 'col'),
+     ('station_name',  'VARCHAR', 'col'),
+     ('network_id',    'INT',     'fk', 'dim_networks'),
+     ('has_night_tube','BOOL',    'col'),
+     ('is_active',     'BOOL',    'col')], DIM_HDR)
+
+h_fpax, mp_fpax = star_box(sl, LC, TT, WF, "fact_passenger_entry_exit",
+    [('entry_exit_id',     'INT',    'pk'),
+     ('station_id',        'INT',    'fk', 'dim_stations'),
+     ('date_id',           'INT',    'fk', 'dim_date'),
+     ('total_entry_exit',  'BIGINT', 'col'),
+     ('estimated_entries', 'BIGINT', 'col'),
+     ('estimated_exits',   'BIGINT', 'col'),
+     ('record_type',       'VARCHAR','col')], FACT_HDR)
+
+h_ddate, mp_ddate = star_box(sl, LR, TT, WD, "dim_date",
+    [('date_id',      'INT',     'pk'),
+     ('year',         'INT',     'col'),
+     ('quarter',      'INT',     'col'),
+     ('period_label', 'VARCHAR', 'col'),
+     ('period_start', 'DATE',    'col')], DIM_HDR)
+
+# ── Bottom row ────────────────────────────────────────────────────────────
+TB = TT + max(h_dstat, h_fpax, h_ddate) + Inches(0.45)
+
+h_dnet, mp_dnet = star_box(sl, LL, TB, WD, "dim_networks",
+    [('network_id',   'INT',     'pk'),
+     ('network_name', 'VARCHAR', 'col'),
+     ('network_type', 'VARCHAR', 'col')], DIM_HDR)
+
+h_fsl, mp_fsl = star_box(sl, LC, TB, WF, "fact_station_lines  (bridge)",
+    [('station_line_id', 'INT',  'pk'),
+     ('station_id',      'INT',  'fk', 'dim_stations'),
+     ('line_id',         'INT',  'fk', 'dim_lines'),
+     ('is_interchange',  'BOOL', 'col')], FACT_HDR)
+
+h_dlin, mp_dlin = star_box(sl, LR, TB, WD, "dim_lines",
+    [('line_id',          'INT',     'pk'),
+     ('line_name',        'VARCHAR', 'col'),
+     ('line_color',       'VARCHAR', 'col'),
+     ('is_night_service', 'BOOL',    'col')], DIM_HDR)
+
+# ── Connector lines (gold) ────────────────────────────────────────────────
+# 1. dim_stations <-> fact_passenger (station_id)
+yc = (mp_dstat['station_id'] + mp_fpax['station_id']) // 2
+conn_h(sl, LL + WD, LC, yc)
+
+# 2. fact_passenger <-> dim_date (date_id)
+yc = (mp_fpax['date_id'] + mp_ddate['date_id']) // 2
+conn_h(sl, LC + WF, LR, yc)
+
+# 3. dim_stations -> dim_networks (network_id, vertical drop)
+xv = LL + Inches(1.1)
+conn_v(sl, xv, TT + h_dstat, TB)
+
+# 4. fact_station_lines <-> dim_lines (line_id)
+yc = (mp_fsl['line_id'] + mp_dlin['line_id']) // 2
+conn_h(sl, LC + WF, LR, yc)
+
+# 5. fact_station_lines <-> dim_stations (station_id) — L-shape
+xv2 = LC - Inches(0.22)
+yf  = mp_fsl['station_id']
+conn_v(sl, xv2, TT + h_dstat, yf)
+conn_h(sl, xv2, LC, yf)
+
+# ── Legend ─────────────────────────────────────────────────────────────────
+ly = Inches(7.07)
+legend_items = [
+    (PK_BG, RGBColor(0x00, 0x88, 0x44), 'PK  Primary Key'),
+    (FK_BG, GOLD,                        'FK  Foreign Key'),
+    (FACT_HDR, WHITE,                    'Fact Table'),
+    (DIM_HDR,  WHITE,                    'Dimension Table'),
+    (GOLD, GOLD,                         '— FK relationship'),
+]
+lx = Inches(0.35)
+for bg, _, label in legend_items:
+    rect(sl, lx, ly, Inches(0.22), Inches(0.20), fill=bg)
+    tb(sl, label, lx+Inches(0.27), ly, Inches(2.3), Inches(0.22),
+       size=8.5, color=BODY_TEXT)
+    lx += Inches(2.55)
 
 
 # ════════════════════════════════════════════════════════════════════════════
