@@ -41,9 +41,11 @@ pipeline {
     SQOOP_FULL_SCRIPT        = 'ON_PREM/data_ingestion_batch/src/raw_layer/full_load/raw_sqoop_full_load.sh'
     SQOOP_INCREMENTAL_SCRIPT = 'ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load/raw_incremental_load.sh'
 
-    RAW_HIVE_SCRIPT     = 'ON_PREM/data_ingestion_batch/src/raw_layer/create_raw_hive_table.hql'
-    CURATED_SPARK_SCRIPT = 'ON_PREM/data_ingestion_batch/src/curated_layer/spark/tfl_curated_layer.py'
-    CURATED_HIVE_SCRIPT  = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/curated_full_load.hql'
+    RAW_HIVE_SCRIPT          = 'ON_PREM/data_ingestion_batch/src/raw_layer/create_raw_hive_table.hql'
+    IMPALA_RAW_SCRIPT        = 'ON_PREM/data_ingestion_batch/src/raw_layer/invalidate_impala_raw.sql'
+    CURATED_SPARK_SCRIPT     = 'ON_PREM/data_ingestion_batch/src/curated_layer/spark/tfl_curated_layer.py'
+    CURATED_HIVE_SCRIPT      = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/curated_full_load.hql'
+    IMPALA_CURATED_SCRIPT    = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/invalidate_impala_curated.sql'
 
     SPARK_FULL_SCRIPT        = 'ON_PREM/data_ingestion_batch/src/raw_layer/full_load/spark/tfl_spark_analysis.py'
     SPARK_INCREMENTAL_SCRIPT = 'ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load/spark/incremental.py'
@@ -292,6 +294,31 @@ stage('Run Sqoop Load on Remote') {
     }
 }
 
+        stage('Register Raw Tables in Impala') {
+    when {
+        expression {
+            return params.LOAD_TOOL == 'SQOOP' && params.LOAD_TYPE == 'FULL'
+        }
+    }
+
+    steps {
+        echo '========================================='
+        echo 'Stage: Invalidate Impala Metadata (Raw)'
+        echo '========================================='
+
+        sh """
+            set +x
+
+            sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
+                cd \${PROJECT_DIR}
+                echo 'Registering raw Hive tables in Impala...'
+                impala-shell -i localhost -f \${IMPALA_RAW_SCRIPT}
+                echo 'Impala raw metadata registered'
+            "
+        """
+    }
+}
+
         stage('Run Spark Full Flow on Remote') {
     when {
         expression {
@@ -368,6 +395,35 @@ stage('Run Sqoop Load on Remote') {
                     echo 'Creating curated Hive tables...'
                     hive -f ${CURATED_HIVE_SCRIPT}
                     echo 'Curated Hive tables created successfully'
+                "
+        '''
+    }
+}
+
+        stage('Register Curated Tables in Impala') {
+    when {
+        expression {
+            return params.LOAD_TOOL == 'SPARK' && params.LOAD_TYPE == 'FULL'
+        }
+    }
+
+    steps {
+        echo '========================================='
+        echo 'Stage: Invalidate Impala Metadata (Curated)'
+        echo '========================================='
+
+        sh '''
+            set +x
+
+            sshpass -p "${REMOTE_PASSWORD}" ssh \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                ${REMOTE_USER}@${REMOTE_HOST} \
+                "
+                    cd ${PROJECT_DIR}
+                    echo 'Registering curated Hive tables in Impala...'
+                    impala-shell -i localhost -f ${IMPALA_CURATED_SCRIPT}
+                    echo 'Impala curated metadata registered'
                 "
         '''
     }
