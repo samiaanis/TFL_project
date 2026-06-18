@@ -285,9 +285,7 @@ stage('Run Sqoop Load on Remote') {
             sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
                 cd \${PROJECT_DIR}
                 echo 'Creating raw Hive external tables in tfl_db...'
-                beeline -u 'jdbc:hive2://localhost:10000' \
-                    --hiveconf mapred.job.queue.name=default \
-                    -f \${RAW_HIVE_SCRIPT}
+                hive -f \${RAW_HIVE_SCRIPT}
                 echo 'Raw Hive tables created successfully'
             "
         """
@@ -368,9 +366,7 @@ stage('Run Sqoop Load on Remote') {
                 "
                     cd ${PROJECT_DIR}
                     echo 'Creating curated Hive tables...'
-                    beeline -u 'jdbc:hive2://localhost:10000' \
-                        --hiveconf mapred.job.queue.name=default \
-                        -f ${CURATED_HIVE_SCRIPT}
+                    hive -f ${CURATED_HIVE_SCRIPT}
                     echo 'Curated Hive tables created successfully'
                 "
         '''
