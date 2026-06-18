@@ -42,9 +42,11 @@ pipeline {
     SQOOP_INCREMENTAL_SCRIPT = 'ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load/raw_incremental_load.sh'
 
     RAW_HIVE_SCRIPT          = 'ON_PREM/data_ingestion_batch/src/raw_layer/create_raw_hive_table.hql'
+    RAW_HIVE_PY_SCRIPT       = 'ON_PREM/data_ingestion_batch/src/raw_layer/create_raw_hive_table.py'
     IMPALA_RAW_SCRIPT        = 'ON_PREM/data_ingestion_batch/src/raw_layer/invalidate_impala_raw.sql'
     CURATED_SPARK_SCRIPT     = 'ON_PREM/data_ingestion_batch/src/curated_layer/spark/tfl_curated_layer.py'
     CURATED_HIVE_SCRIPT      = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/curated_full_load.hql'
+    CURATED_HIVE_PY_SCRIPT   = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/create_curated_hive_table.py'
     IMPALA_CURATED_SCRIPT    = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/invalidate_impala_curated.sql'
 
     SPARK_FULL_SCRIPT        = 'ON_PREM/data_ingestion_batch/src/raw_layer/full_load/spark/tfl_spark_analysis.py'
@@ -286,8 +288,8 @@ stage('Run Sqoop Load on Remote') {
 
             sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
                 cd \${PROJECT_DIR}
-                echo 'Creating raw Hive external tables in tfl_db...'
-                hive -f \${RAW_HIVE_SCRIPT}
+                echo 'Creating raw Hive external tables in tfl_db via Spark...'
+                spark-submit --master local[*] \${RAW_HIVE_PY_SCRIPT}
                 echo 'Raw Hive tables created successfully'
             "
         """
@@ -312,8 +314,8 @@ stage('Run Sqoop Load on Remote') {
             sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
                 cd \${PROJECT_DIR}
                 echo 'Registering raw Hive tables in Impala...'
-                impala-shell -i localhost -f \${IMPALA_RAW_SCRIPT}
-                echo 'Impala raw metadata registered'
+                impala-shell -i localhost -f \${IMPALA_RAW_SCRIPT} || echo 'WARNING: impala-shell failed (Python version issue) - run INVALIDATE METADATA manually in Hue if needed'
+                echo 'Impala stage complete'
             "
         """
     }
@@ -392,8 +394,8 @@ stage('Run Sqoop Load on Remote') {
                 ${REMOTE_USER}@${REMOTE_HOST} \
                 "
                     cd ${PROJECT_DIR}
-                    echo 'Creating curated Hive tables...'
-                    hive -f ${CURATED_HIVE_SCRIPT}
+                    echo 'Creating curated Hive tables via Spark...'
+                    spark-submit --master local[*] ${CURATED_HIVE_PY_SCRIPT}
                     echo 'Curated Hive tables created successfully'
                 "
         '''
@@ -422,8 +424,8 @@ stage('Run Sqoop Load on Remote') {
                 "
                     cd ${PROJECT_DIR}
                     echo 'Registering curated Hive tables in Impala...'
-                    impala-shell -i localhost -f ${IMPALA_CURATED_SCRIPT}
-                    echo 'Impala curated metadata registered'
+                    impala-shell -i localhost -f ${IMPALA_CURATED_SCRIPT} || echo 'WARNING: impala-shell failed (Python version issue) - run INVALIDATE METADATA manually in Hue if needed'
+                    echo 'Impala curated stage complete'
                 "
         '''
     }
