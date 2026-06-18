@@ -9,11 +9,9 @@ spark = SparkSession.builder \
 
 spark.sparkContext.setLogLevel("WARN")
 
-HDFS_BASE   = "/tmp/tfl_project_hadoop"
 OUTPUT_BASE = "/tmp/tfl_project_hadoop/gold"
 HIVE_DB     = "tfl_db"
 
-spark.sql(f"CREATE DATABASE IF NOT EXISTS {HIVE_DB}")
 spark.sql(f"USE {HIVE_DB}")
 
 print("=" * 60)
@@ -21,97 +19,17 @@ print("TFL Data Analysis Pipeline")
 print("=" * 60)
 
 # ============================================================
-# CREATE SOURCE EXTERNAL TABLES IN HIVE
+# LOAD ALL TABLES FROM HIVE (created by create_raw_hive_table.hql)
 # ============================================================
 
-print("\nCreating source Hive external tables...")
+print("\nLoading tables from Hive tfl_db...")
 
-spark.sql(f"""
-    CREATE EXTERNAL TABLE IF NOT EXISTS {HIVE_DB}.dim_date (
-        date_id INT, year INT, quarter INT, month INT, is_annual BOOLEAN,
-        period_label STRING, period_start STRING, period_end STRING, created_at STRING
-    ) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-    STORED AS TEXTFILE LOCATION '{HDFS_BASE}/dim_date'
-""")
-
-spark.sql(f"""
-    CREATE EXTERNAL TABLE IF NOT EXISTS {HIVE_DB}.dim_lines (
-        line_id INT, line_name STRING, line_color STRING, is_night_service BOOLEAN,
-        created_at STRING, updated_at STRING
-    ) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-    STORED AS TEXTFILE LOCATION '{HDFS_BASE}/dim_lines'
-""")
-
-spark.sql(f"""
-    CREATE EXTERNAL TABLE IF NOT EXISTS {HIVE_DB}.dim_networks (
-        network_id INT, network_name STRING, network_type STRING,
-        created_at STRING, updated_at STRING
-    ) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-    STORED AS TEXTFILE LOCATION '{HDFS_BASE}/dim_networks'
-""")
-
-spark.sql(f"""
-    CREATE EXTERNAL TABLE IF NOT EXISTS {HIVE_DB}.dim_stations (
-        station_id INT, nlc_code STRING, station_name STRING, network_id INT,
-        has_london_underground BOOLEAN, has_elizabeth_line BOOLEAN,
-        has_overground BOOLEAN, has_dlr BOOLEAN, has_night_tube BOOLEAN,
-        is_active BOOLEAN, created_at STRING, updated_at STRING
-    ) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-    STORED AS TEXTFILE LOCATION '{HDFS_BASE}/dim_stations'
-""")
-
-spark.sql(f"""
-    CREATE EXTERNAL TABLE IF NOT EXISTS {HIVE_DB}.fact_passenger_entry_exit (
-        entry_exit_id BIGINT, station_id INT, date_id INT,
-        total_entry_exit BIGINT, estimated_entries BIGINT, estimated_exits BIGINT,
-        record_type STRING, data_source STRING, created_at STRING
-    ) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-    STORED AS TEXTFILE LOCATION '{HDFS_BASE}/fact_passenger_entry_exit'
-""")
-
-spark.sql(f"""
-    CREATE EXTERNAL TABLE IF NOT EXISTS {HIVE_DB}.fact_station_lines (
-        station_line_id INT, station_id INT, line_id INT, is_interchange BOOLEAN,
-        effective_from STRING, effective_to STRING, created_at STRING
-    ) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-    STORED AS TEXTFILE LOCATION '{HDFS_BASE}/fact_station_lines'
-""")
-
-print("Source tables created successfully")
-
-# ============================================================
-# LOAD ALL TABLES FROM HDFS
-# ============================================================
-
-print("\nLoading tables from HDFS...")
-
-dim_date = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_date_full_load") \
-    .toDF("date_id","year","quarter","month","is_annual","period_label","period_start","period_end","created_at")
-
-dim_lines = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_lines_full_load") \
-    .toDF("line_id","line_name","line_color","is_night_service","created_at","updated_at")
-
-dim_networks = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_networks_full_load") \
-    .toDF("network_id","network_name","network_type","created_at","updated_at")
-
-dim_stations = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/dim_stations_full_load") \
-    .toDF("station_id","nlc_code","station_name","network_id",
-          "has_london_underground","has_elizabeth_line","has_overground",
-          "has_dlr","has_night_tube","is_active","created_at","updated_at")
-
-fact_pax = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/fact_passenger_entry_exit_full_load") \
-    .toDF("entry_exit_id","station_id","date_id","total_entry_exit",
-          "estimated_entries","estimated_exits","record_type","data_source","created_at")
-
-fact_lines = spark.read.option("header", "false").option("inferSchema", "true") \
-    .csv(f"{HDFS_BASE}/fact_station_lines_full_load") \
-    .toDF("station_line_id","station_id","line_id","is_interchange",
-          "effective_from","effective_to","created_at")
+dim_date     = spark.table(f"{HIVE_DB}.dim_date")
+dim_lines    = spark.table(f"{HIVE_DB}.dim_lines")
+dim_networks = spark.table(f"{HIVE_DB}.dim_networks")
+dim_stations = spark.table(f"{HIVE_DB}.dim_stations")
+fact_pax     = spark.table(f"{HIVE_DB}.fact_passenger_entry_exit")
+fact_lines   = spark.table(f"{HIVE_DB}.fact_station_lines")
 
 print("All 6 tables loaded successfully")
 

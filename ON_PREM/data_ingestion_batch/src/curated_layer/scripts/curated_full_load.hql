@@ -4,7 +4,7 @@
 
 -- Default parameters (can be overridden via beeline)
 SET hivevar:DB_NAME=tfl_db;
-SET hivevar:BASE_PATH=/tmp/aparna/tfl_proj/curated_data;
+SET hivevar:BASE_PATH=/tmp/tfl_project_hadoop/curated;
 
 -- Use database
 USE ${hivevar:DB_NAME};

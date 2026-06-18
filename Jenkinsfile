@@ -38,10 +38,14 @@ pipeline {
 
     SSH_OPTS = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
-    SQOOP_FULL_SCRIPT = 'ON_PREM/data_ingestion_batch/src/raw_layer/full_load/raw_sqoop_full_load.sh'
+    SQOOP_FULL_SCRIPT        = 'ON_PREM/data_ingestion_batch/src/raw_layer/full_load/raw_sqoop_full_load.sh'
     SQOOP_INCREMENTAL_SCRIPT = 'ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load/raw_incremental_load.sh'
 
-    SPARK_FULL_SCRIPT = 'ON_PREM/data_ingestion_batch/src/raw_layer/full_load/spark/tfl_spark_analysis.py'
+    RAW_HIVE_SCRIPT     = 'ON_PREM/data_ingestion_batch/src/raw_layer/create_raw_hive_table.hql'
+    CURATED_SPARK_SCRIPT = 'ON_PREM/data_ingestion_batch/src/curated_layer/spark/tfl_curated_layer.py'
+    CURATED_HIVE_SCRIPT  = 'ON_PREM/data_ingestion_batch/src/curated_layer/scripts/curated_full_load.hql'
+
+    SPARK_FULL_SCRIPT        = 'ON_PREM/data_ingestion_batch/src/raw_layer/full_load/spark/tfl_spark_analysis.py'
     SPARK_INCREMENTAL_SCRIPT = 'ON_PREM/data_ingestion_batch/src/raw_layer/incremental_load/spark/incremental.py'
 }
 
@@ -263,6 +267,33 @@ stage('Run Sqoop Load on Remote') {
         }
     }
 }
+        stage('Create Raw Hive Tables') {
+    when {
+        expression {
+            return params.LOAD_TOOL == 'SQOOP' && params.LOAD_TYPE == 'FULL'
+        }
+    }
+
+    steps {
+        echo '========================================='
+        echo 'Stage: Create Raw Hive External Tables'
+        echo '========================================='
+
+        sh """
+            set +x
+
+            sshpass -p "\${REMOTE_PASSWORD}" ssh \${SSH_OPTS} \${REMOTE_USER}@\${REMOTE_HOST} "
+                cd \${PROJECT_DIR}
+                echo 'Creating raw Hive external tables in tfl_db...'
+                beeline -u 'jdbc:hive2://localhost:10000' \
+                    --hiveconf mapred.job.queue.name=default \
+                    -f \${RAW_HIVE_SCRIPT}
+                echo 'Raw Hive tables created successfully'
+            "
+        """
+    }
+}
+
         stage('Run Spark Full Flow on Remote') {
     when {
         expression {
@@ -281,6 +312,66 @@ stage('Run Sqoop Load on Remote') {
                 "
                     cd ${PROJECT_DIR}
                     spark-submit --master local[*] ${SPARK_FULL_SCRIPT}
+                "
+        '''
+    }
+}
+
+        stage('Run Curated Layer on Remote') {
+    when {
+        expression {
+            return params.LOAD_TOOL == 'SPARK' && params.LOAD_TYPE == 'FULL'
+        }
+    }
+
+    steps {
+        echo '========================================='
+        echo 'Stage: Run Curated Layer (Spark)'
+        echo '========================================='
+
+        sh '''
+            set +x
+
+            sshpass -p "${REMOTE_PASSWORD}" ssh \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                ${REMOTE_USER}@${REMOTE_HOST} \
+                "
+                    cd ${PROJECT_DIR}
+                    echo 'Running curated layer transformation...'
+                    spark-submit --master local[*] ${CURATED_SPARK_SCRIPT}
+                    echo 'Curated layer complete'
+                "
+        '''
+    }
+}
+
+        stage('Create Curated Hive Tables') {
+    when {
+        expression {
+            return params.LOAD_TOOL == 'SPARK' && params.LOAD_TYPE == 'FULL'
+        }
+    }
+
+    steps {
+        echo '========================================='
+        echo 'Stage: Create Curated Hive Tables'
+        echo '========================================='
+
+        sh '''
+            set +x
+
+            sshpass -p "${REMOTE_PASSWORD}" ssh \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                ${REMOTE_USER}@${REMOTE_HOST} \
+                "
+                    cd ${PROJECT_DIR}
+                    echo 'Creating curated Hive tables...'
+                    beeline -u 'jdbc:hive2://localhost:10000' \
+                        --hiveconf mapred.job.queue.name=default \
+                        -f ${CURATED_HIVE_SCRIPT}
+                    echo 'Curated Hive tables created successfully'
                 "
         '''
     }

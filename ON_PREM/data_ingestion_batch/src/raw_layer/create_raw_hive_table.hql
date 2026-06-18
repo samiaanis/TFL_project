@@ -35,7 +35,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dim_networks (
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
 STORED AS TEXTFILE
-LOCATION '/tmp/aparna/tfl_proj/tfl_data/dim_networks'
+LOCATION '/tmp/tfl_project_hadoop/dim_networks_full_load'
 TBLPROPERTIES ("skip.header.line.count"="1");
 
 !echo dim_networks created successfully
@@ -52,7 +52,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dim_lines (
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
 STORED AS TEXTFILE
-LOCATION '/tmp/aparna/tfl_proj/tfl_data/dim_lines'
+LOCATION '/tmp/tfl_project_hadoop/dim_lines_full_load'
 TBLPROPERTIES ("skip.header.line.count"="1");
 
 !echo dim_lines created successfully
@@ -75,7 +75,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dim_stations (
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
 STORED AS TEXTFILE
-LOCATION '/tmp/aparna/tfl_proj/tfl_data/dim_stations'
+LOCATION '/tmp/tfl_project_hadoop/dim_stations_full_load'
 TBLPROPERTIES ("skip.header.line.count"="1");
 
 !echo dim_stations created successfully
@@ -95,7 +95,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dim_date (
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
 STORED AS TEXTFILE
-LOCATION '/tmp/aparna/tfl_proj/tfl_data/dim_date'
+LOCATION '/tmp/tfl_project_hadoop/dim_date_full_load'
 TBLPROPERTIES ("skip.header.line.count"="1");
 
 !echo dim_date created successfully
@@ -119,7 +119,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS fact_station_lines (
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
 STORED AS TEXTFILE
-LOCATION '/tmp/aparna/tfl_proj/tfl_data/fact_station_lines'
+LOCATION '/tmp/tfl_project_hadoop/fact_station_lines_full_load'
 TBLPROPERTIES ("skip.header.line.count"="1");
 
 !echo fact_station_lines created successfully
@@ -139,7 +139,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS fact_passenger_entry_exit (
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
 STORED AS TEXTFILE
-LOCATION '/tmp/aparna/tfl_proj/tfl_data/fact_passenger_entry_exit'
+LOCATION '/tmp/tfl_project_hadoop/fact_passenger_entry_exit_full_load'
 TBLPROPERTIES ("skip.header.line.count"="1");
 
 !echo fact_passenger_entry_exit created successfully

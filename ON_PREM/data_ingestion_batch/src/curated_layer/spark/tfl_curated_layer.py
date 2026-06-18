@@ -16,7 +16,7 @@ print('Author: APARNA')
 print('=====================================================')
 
 db = "tfl_db"
-base_path = "/tmp/aparna/tfl_proj/curated_data"
+base_path = "/tmp/tfl_project_hadoop/curated"
 
 # =====================================================
 # LOAD SOURCES
