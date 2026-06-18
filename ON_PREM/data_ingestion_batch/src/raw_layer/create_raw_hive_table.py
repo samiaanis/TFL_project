@@ -14,8 +14,10 @@ print("=" * 60)
 spark.sql("CREATE DATABASE IF NOT EXISTS tfl_db")
 spark.sql("USE tfl_db")
 
+# DROP before CREATE so stale LOCATION paths from old runs are replaced
+spark.sql("DROP TABLE IF EXISTS dim_networks")
 spark.sql("""
-CREATE EXTERNAL TABLE IF NOT EXISTS dim_networks (
+CREATE EXTERNAL TABLE dim_networks (
   network_id    INT,
   network_name  STRING,
   network_type  STRING,
@@ -30,8 +32,9 @@ TBLPROPERTIES ('skip.header.line.count'='1')
 """)
 print("dim_networks created")
 
+spark.sql("DROP TABLE IF EXISTS dim_lines")
 spark.sql("""
-CREATE EXTERNAL TABLE IF NOT EXISTS dim_lines (
+CREATE EXTERNAL TABLE dim_lines (
   line_id          INT,
   line_name        STRING,
   line_color       STRING,
@@ -47,8 +50,9 @@ TBLPROPERTIES ('skip.header.line.count'='1')
 """)
 print("dim_lines created")
 
+spark.sql("DROP TABLE IF EXISTS dim_stations")
 spark.sql("""
-CREATE EXTERNAL TABLE IF NOT EXISTS dim_stations (
+CREATE EXTERNAL TABLE dim_stations (
   station_id              INT,
   nlc_code                STRING,
   station_name            STRING,
@@ -70,8 +74,9 @@ TBLPROPERTIES ('skip.header.line.count'='1')
 """)
 print("dim_stations created")
 
+spark.sql("DROP TABLE IF EXISTS dim_date")
 spark.sql("""
-CREATE EXTERNAL TABLE IF NOT EXISTS dim_date (
+CREATE EXTERNAL TABLE dim_date (
   date_id      INT,
   year         INT,
   quarter      INT,
@@ -90,8 +95,9 @@ TBLPROPERTIES ('skip.header.line.count'='1')
 """)
 print("dim_date created")
 
+spark.sql("DROP TABLE IF EXISTS fact_station_lines")
 spark.sql("""
-CREATE EXTERNAL TABLE IF NOT EXISTS fact_station_lines (
+CREATE EXTERNAL TABLE fact_station_lines (
   station_line_id INT,
   station_id      INT,
   line_id         INT,
@@ -108,17 +114,18 @@ TBLPROPERTIES ('skip.header.line.count'='1')
 """)
 print("fact_station_lines created")
 
+spark.sql("DROP TABLE IF EXISTS fact_passenger_entry_exit")
 spark.sql("""
-CREATE EXTERNAL TABLE IF NOT EXISTS fact_passenger_entry_exit (
-  entry_exit_id   INT,
-  station_id      INT,
-  date_id         INT,
+CREATE EXTERNAL TABLE fact_passenger_entry_exit (
+  entry_exit_id     INT,
+  station_id        INT,
+  date_id           INT,
   total_entry_exit  INT,
   estimated_entries INT,
   estimated_exits   INT,
-  record_type     STRING,
-  data_source     STRING,
-  created_at      TIMESTAMP
+  record_type       STRING,
+  data_source       STRING,
+  created_at        TIMESTAMP
 )
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
@@ -129,7 +136,6 @@ TBLPROPERTIES ('skip.header.line.count'='1')
 print("fact_passenger_entry_exit created")
 
 print("\nValidation - tables in tfl_db:")
-spark.sql("USE tfl_db")
 spark.sql("SHOW TABLES").show()
 
 print("=" * 60)
